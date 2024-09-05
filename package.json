@@ -1,5 +1,22 @@
 {
   "dependencies": {
-    "puppeteer": "^23.3.0"
-  }
+    "puppeteer": "^23.3.0",
+    "three": "^0.168.0"
+  },
+  "name": "vrchat",
+  "version": "1.0.0",
+  "main": "index.js",
+  "devDependencies": {
+    "vite": "^5.4.3"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
 }

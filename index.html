@@ -1,23 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediaPipe Face Landmarker Demo</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mediapipe Blendshapes</title>
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
 </head>
 
 <body>
   <div class="container">
-    <video id="video" autoplay></video>
-    <canvas class="output_canvas" width="1280px" height="720px"></canvas>
-    <div class="loading">
-      <div class="spinner"></div>
-    </div>
+    <video autoplay playsinline id="video"></video>
   </div>
 
-  <script type="module" src="index.js"></script>
+  <!-- Import your entry TypeScript file -->
+  <script type="module" src="/src/index.ts"></script>
 </body>
-
-</html>
