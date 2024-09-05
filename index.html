@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<title>VRM Avatar</title>
+	<style>
+		canvas {
+			display: block;
+		}
+	</style>
+</head>
+
+<body>
+	<!-- Load the Three.js library -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+	<!-- Load GLTFLoader (needed by VRMLoader) -->
+	<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+	<!-- Load VRMLoader -->
+	<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/VRMLoader.js"></script>
+
+	<script>
+		let scene, camera, renderer, mixer, clock;
+
+		function init() {
+			scene = new THREE.Scene();
+			camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+			renderer = new THREE.WebGLRenderer();
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			document.body.appendChild(renderer.domElement);
+
+			// Add lights for proper avatar rendering
+			const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);  // Soft white light
+			scene.add(ambientLight);
+
+			const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+			directionalLight.position.set(1, 1, 1).normalize();
+			scene.add(directionalLight);
+
+			// Load the VRM model
+			const loader = new THREE.VRMLoader();
+			loader.load('./avatar.vrm', function (vrm) {
+				vrm.scene.scale.set(1, 1, 1);  // Adjust the scale as needed
+				vrm.scene.rotation.y = Math.PI;  // Rotate to face forward
+				scene.add(vrm.scene);
+
+				// Set up animation if available
+				if (vrm.scene.animations && vrm.scene.animations.length > 0) {
+					mixer = new THREE.AnimationMixer(vrm.scene);
+					const action = mixer.clipAction(vrm.scene.animations[0]);  // Play the first animation
+					action.play();
+				}
+			});
+
+			camera.position.set(0, 1, 3);  // Adjust camera position to get a good view of the avatar
+			clock = new THREE.Clock();
+		}
+
+		function animate() {
+			requestAnimationFrame(animate);
+
+			// Update the animation if available
+			if (mixer) {
+				const delta = clock.getDelta();
+				mixer.update(delta);
+			}
+
+			// Render the scene
+			renderer.render(scene, camera);
+		}
+
+		init();
+		animate();
+	</script>
+</body>
+
+</html>
