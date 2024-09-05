@@ -13,7 +13,10 @@ pkgs.mkShell {
     pkgs.opencv
     pkgs.ffmpeg
     pkgs.libGL
-    pkgs.v4l-utils  ];
+    pkgs.v4l-utils
+    pkgs.nodejs  # Add nodejs to avoid ABI issues
+  ];
+
   shellHook = ''
     export VENV_DIR=".venv"
     export LD_LIBRARY_PATH=${pkgs.zlib.out}/lib:${pkgs.gcc.out}/lib64:${pkgs.stdenv.cc.cc.lib}/lib64:$LD_LIBRARY_PATH
@@ -26,12 +29,15 @@ pkgs.mkShell {
       source $VENV_DIR/bin/activate
     fi
 
-    # Use uv to install packages from requirements.txt
+    # Ensure node modules install correctly
+    export PATH=${pkgs.nodejs}/bin:$PATH
+
+    # Use uv to install Python packages from requirements.txt
     uv pip install -r requirements.txt
 
-    # Debugging: Print Python version and executable path
     echo "Python version: $(python --version)"
     echo "Python executable: $(which python)"
+    echo "Node.js version: $(node --version)"
     echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
   '';
 }

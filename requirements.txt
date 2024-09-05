@@ -1,1 +1,4 @@
+mediapipe
+websockets
 opencv-python
+mss

@@ -1,96 +1,139 @@
 import cv2
+import mediapipe as mp
 import subprocess
 import os
-import sys
-import glob
+import asyncio
+import websockets
+import json
+import threading
+import time
+import http.server
+import socketserver
+
+# Initialize MediaPipe Face Landmarker using the latest API
+mp_face_landmarker = mp.tasks.vision.FaceLandmarker
+BaseOptions = mp.tasks.BaseOptions
+VisionTaskOptions = mp.tasks.vision.VisionTaskOptions
+FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
 
 
-def find_vrm_in_directory(directory="./"):
-    """Find the first .vrm file in the specified directory."""
-    vrm_files = glob.glob(os.path.join(directory, "*.vrm"))
-    if vrm_files:
-        return vrm_files[0]
+def initialize_face_landmarker():
+    options = FaceLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path="face_landmarker.task"),
+        running_mode=VisionRunningMode.VIDEO,
+        num_faces=1  # Detect only 1 face for simplicity
+    )
+    return mp_face_landmarker.create_from_options(options)
+
+
+face_landmarker = initialize_face_landmarker()
+
+# Start the HTTP server in the same script
+
+
+def start_http_server():
+    handler = http.server.SimpleHTTPRequestHandler
+    httpd = socketserver.TCPServer(("", 8000), handler)
+    print("Serving HTTP on port 8000...")
+    httpd.serve_forever()
+
+# Launch Puppeteer for Three.js rendering
+
+
+def launch_puppeteer():
+    command = ["node", "launch_browser.js"]
+    return subprocess.Popen(command)
+
+# Start wf-recorder for browser window capture
+
+
+def start_wf_recorder(output_file="/tmp/avatar_feed.mp4"):
+    if os.path.exists(output_file):
+        os.remove(output_file)
+
+    # Adjust window size and position to fit the actual window
+    command = ["wf-recorder", "-g", "100,100 1280x720", "-f", output_file]
+    return subprocess.Popen(command)
+
+# Extract facial landmarks using the new MediaPipe Face Landmarker API
+
+
+def get_facial_landmarks(image):
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Create a MediaPipe Image object from the OpenCV frame
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+
+    # Process the frame to get facial landmarks
+    result = face_landmarker.detect_for_video(mp_image, time.time())
+    if result.face_landmarks:
+        landmarks = result.face_landmarks[0]
+        # Normalized landmarks (x, y, z)
+        return [(lm.x, lm.y, lm.z) for lm in landmarks]
     return None
 
+# Send landmarks via WebSocket
 
-def main(vrm_file=None, webcam_index=0, virtual_cam_device="/dev/video10"):
-    # If no .vrm file is provided, search for one in the current directory
-    if vrm_file is None:
-        vrm_file = find_vrm_in_directory()
-        if vrm_file is None:
-            print("No VRM file found in the current directory.")
-            return
 
-    print(f"Using VRM file: {vrm_file}")
+async def send_landmarks(websocket):
+    cap = cv2.VideoCapture(0)
 
-    # Initialize webcam capture
-    cap = cv2.VideoCapture(webcam_index)
-
-    # Check if webcam is opened successfully
     if not cap.isOpened():
-        print(f"Error: Could not open webcam at index {webcam_index}.")
+        print("Error: Could not open webcam.")
         return
-
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    # Set up ffmpeg to pipe video to the virtual webcam
-    ffmpeg_command = [
-        'ffmpeg',
-        '-f', 'rawvideo',
-        '-pix_fmt', 'bgr24',
-        '-s', f'{frame_width}x{frame_height}',
-        '-r', '30',
-        '-i', '-',
-        '-f', 'v4l2',
-        virtual_cam_device
-    ]
-
-    ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE)
 
     try:
         while True:
-            # Capture frame from webcam
             ret, frame = cap.read()
             if not ret:
-                print("Failed to capture frame, exiting.")
+                print("Failed to capture frame.")
                 break
 
-            # You can integrate rendering using Virtual Motion Capture here
+            # Get facial landmarks using the new API
+            landmarks = get_facial_landmarks(frame)
+            if landmarks:
+                await websocket.send(json.dumps(landmarks))
 
-            # Write the frame to ffmpeg for piping to the virtual webcam
-            ffmpeg_process.stdin.write(frame.tobytes())
+            # Show the webcam feed in a window for debugging
+            cv2.imshow("Webcam Feed", frame)
 
-            # Display the frame for debugging (optional)
-            cv2.imshow('Webcam Feed', frame)
-
-            # Exit loop if 'q' is pressed
+            # Handle 'q' to quit the window
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-    except KeyboardInterrupt:
-        print("Exiting...")
+    except Exception as e:
+        print(f"Error: {e}")
 
     finally:
-        # Clean up resources
         cap.release()
-        ffmpeg_process.stdin.close()
-        ffmpeg_process.wait()
         cv2.destroyAllWindows()
 
+# Main async loop
 
+
+async def main():
+    # Start HTTP server in a separate thread
+    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    http_thread.start()
+
+    # Give the server a second to start
+    time.sleep(1)
+
+    # Launch Puppeteer to open the Three.js avatar
+    puppeteer_process = launch_puppeteer()
+
+    # Start wf-recorder for browser capture
+    recorder_process = start_wf_recorder()
+
+    # Set up WebSocket to send facial landmarks to the Three.js app
+    async with websockets.serve(send_landmarks, "localhost", 8765):
+        await asyncio.Future()  # Run forever
+
+    # Clean up processes on exit
+    puppeteer_process.terminate()
+    recorder_process.terminate()
+
+# Run the WebSocket server and everything else
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(
-        description="Webcam to VRM avatar virtual webcam.")
-    parser.add_argument("--vrm", type=str, help="Path to a VRM file.")
-    parser.add_argument("--webcam", type=int, default=0,
-                        help="Webcam index (default: 0).")
-    parser.add_argument("--virtual_cam", type=str, default="/dev/video10",
-                        help="Virtual camera device (default: /dev/video10).")
-
-    args = parser.parse_args()
-
-    # Call main with the arguments
-    main(vrm_file=args.vrm, webcam_index=args.webcam,
-         virtual_cam_device=args.virtual_cam)
+    asyncio.run(main())
